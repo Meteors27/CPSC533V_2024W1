@@ -1,3 +1,5 @@
+from pydoc import render_doc
+import re
 import gymnasium as gym
 import math
 import random
@@ -16,46 +18,58 @@ GAMMA = 0.99
 EPS_EXPLORATION = 0.2
 TARGET_UPDATE = 10
 NUM_EPISODES = 4000
-TEST_INTERVAL = 25
-LEARNING_RATE = 10e-4
+TEST_INTERVAL = 100
+LEARNING_RATE = 20e-4
 RENDER_INTERVAL = 20
 ENV_NAME = "CartPole-v1"
-PRINT_INTERVAL = 1
+PRINT_INTERVAL = 10
 
-env = gym.make(ENV_NAME)
+env = gym.make(ENV_NAME, render_mode="human")
 state_shape = len(env.reset()[0])
 n_actions = env.action_space.n
 
 model = MyModel(state_shape, n_actions).to(device)
+# load the best model if it exists
+try:
+    model.load_state_dict(torch.load("best_model_{}.pt".format(ENV_NAME)))
+    print("loading model.")
+except FileNotFoundError:
+    print("training model from scratch.")
+
 target = MyModel(state_shape, n_actions).to(device)
 target.load_state_dict(model.state_dict())
 target.eval()
 
 optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE)
-# memory = ReplayBuffer()
+memory = ReplayBuffer()
 
 
 def choose_action(state, test_mode=False):
     if not test_mode and random.random() < EPS_EXPLORATION:
         return torch.tensor(env.action_space.sample(), device=device).view(1, 1)
     else:
-        state = torch.tensor(
-            np.array(state), device=device, dtype=torch.float32
-        ).unsqueeze(0)
+        state = torch.tensor(state, device=device, dtype=torch.float32).unsqueeze(0)
         with torch.no_grad():
-            return torch.tensor(model.select_action(state), device=device).view(1, 1)
+            return model.select_action(state)
 
 
 def optimize_model(state, action, next_state, reward, done):
     # TODO given a tuple (s_t, a_t, s_{t+1}, r_t, done_t) update your model weights
-    state = torch.tensor(np.array(state), device=device, dtype=torch.float32).unsqueeze(
-        0
-    )
-    next_state = torch.tensor(
-        np.array(next_state), device=device, dtype=torch.float32
-    ).unsqueeze(0)
-    y_i = reward + (1 - done) * GAMMA * target(next_state).max(1)[0].detach()
-    loss = F.mse_loss(y_i, model(state).gather(1, action))
+    memory.push(state, action, reward, next_state, done)
+    if len(memory) < BATCH_SIZE:
+        return
+    states, actions, rewards, next_states, dones = memory.sample(BATCH_SIZE)
+    actions = actions.long()
+    # ipdb.set_trace()
+    y_i = reward + (1 - dones) * GAMMA * target(next_states).max(1)[0].detach()
+    loss = F.mse_loss(y_i.unsqueeze(1), model(states).gather(1, actions))
+
+    # state = torch.tensor(state, device=device, dtype=torch.float32).unsqueeze(0)
+    # next_state = torch.tensor(next_state, device=device, dtype=torch.float32).unsqueeze(
+    #     0
+    # )
+    # y_i = reward + (1 - done) * GAMMA * target(next_state).max(1)[0].detach()
+    # loss = F.mse_loss(y_i.unsqueeze(1), model(state).gather(1, action))
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
@@ -107,4 +121,4 @@ def train_reinforcement_learning(render=False):
 
 
 if __name__ == "__main__":
-    train_reinforcement_learning()
+    train_reinforcement_learning(render=True)

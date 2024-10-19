@@ -4,9 +4,12 @@ import torch
 
 from eval_policy import device
 
-Transition = collections.namedtuple('Transition', ('state', 'action', 'next_state', 'reward', 'done'))
+Transition = collections.namedtuple(
+    "Transition", ("state", "action", "next_state", "reward", "done")
+)
 
-class ReplayBuffer():
+
+class ReplayBuffer:
     def __init__(self, max_size=10000):
         self.data = collections.deque([], maxlen=max_size)
 
@@ -17,7 +20,9 @@ class ReplayBuffer():
     def sample(self, batch_size):
         transitions = random.sample(self.data, batch_size)
 
-        batch = Transition(*zip(*transitions)) # from batch of Transitions to Transition of batches
+        batch = Transition(
+            *zip(*transitions)
+        )  # from batch of Transitions to Transition of batches
         state = torch.tensor(batch.state, device=device, dtype=torch.float32)
         next_state = torch.tensor(batch.next_state, device=device, dtype=torch.float32)
         action = torch.tensor(batch.action, device=device, dtype=torch.float32)[:, None]
