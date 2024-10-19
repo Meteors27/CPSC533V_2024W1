@@ -6,6 +6,9 @@ import torch
 from eval_policy import eval_policy, device
 from model import MyModel
 from replay_buffer import ReplayBuffer
+import numpy as np
+import torch.nn.functional as F
+import ipdb
 
 
 BATCH_SIZE = 256
@@ -33,13 +36,26 @@ optimizer = torch.optim.SGD(model.parameters(), lr=LEARNING_RATE)
 
 
 def choose_action(state, test_mode=False):
-    # TODO implement an epsilon-greedy strategy
-    raise NotImplementedError()
+    if not test_mode and random.random() < EPS_EXPLORATION:
+        return torch.tensor(env.action_space.sample(), device=device).view(1, 1)
+    else:
+        state = torch.tensor(
+            np.array(state), device=device, dtype=torch.float32
+        ).unsqueeze(0)
+        with torch.no_grad():
+            return torch.tensor(model.select_action(state), device=device).view(1, 1)
 
 
 def optimize_model(state, action, next_state, reward, done):
     # TODO given a tuple (s_t, a_t, s_{t+1}, r_t, done_t) update your model weights
-
+    state = torch.tensor(np.array(state), device=device, dtype=torch.float32).unsqueeze(
+        0
+    )
+    next_state = torch.tensor(
+        np.array(next_state), device=device, dtype=torch.float32
+    ).unsqueeze(0)
+    y_i = reward + (1 - done) * GAMMA * target(next_state).max(1)[0].detach()
+    loss = F.mse_loss(y_i, model(state).gather(1, action))
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
